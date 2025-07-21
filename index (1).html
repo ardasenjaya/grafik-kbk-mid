@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <title>Grafik Indikator Bulanan</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.4.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      padding: 10px;
+    }
+    #container {
+      background: #fff;
+      padding: 10px;
+    }
+    table {
+      border-collapse: collapse;
+      margin-bottom: 10px;
+      font-size: 14px;
+      width: 100%;
+    }
+    th, td {
+      padding: 4px;
+      text-align: center;
+      border: 1px solid #ccc;
+    }
+    input[type="number"] {
+      width: 80px;
+      font-size: 14px;
+      text-align: right;
+      box-sizing: border-box;
+    }
+    button {
+      appearance: none;
+      background-color: #2ea44f;
+      border: 1px solid rgba(27, 31, 35, .15);
+      border-radius: 6px;
+      box-shadow: rgba(27, 31, 35, .1) 0 1px 0;
+      box-sizing: border-box;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+      font-weight: 600;
+      padding: 6px 16px;
+      text-align: center;
+      text-decoration: none;
+    }
+    button:hover {
+      background-color: #2c974b;
+    }
+    canvas {
+      width: 100% !important;
+      height: 420px !important;
+    }
+    input.for-canvas {
+      transform: scale(1.1);
+      transform-origin: left center;
+      padding: 2px 4px;
+      font-size: 14px !important;
+    }
+    @media (max-width: 600px) {
+      table { font-size: 12px; }
+      input[type="number"] {
+        font-size: 12px;
+        width: 90px;
+      }
+    }
+  </style>
+</head>
+<body>
+<h3 style="text-align:center">Grafik Indikator Bulanan</h3>
+<div id="container">
+  <form id="dataForm">
+    <table>
+      <thead><tr><th>Indikator</th><th>Bulan Ini</th></tr></thead>
+      <tbody id="formBody"></tbody>
+    </table>
+    <button type="submit">Tampilkan Grafik</button>
+    <button type="button" id="saveBtn">Save to PNG</button>
+  </form>
+  <canvas id="indikatorChart"></canvas>
+</div>
+<script>
+const indikator = [
+  { nama: 'Angka Kontak', persen: true, target: 15, label: 'Target' },
+  { nama: 'RRNS', persen: true, target: 2, label: 'Maksimal' },
+  { nama: 'Prolanis Terkendali', persen: true, target: 5, label: 'Target' },
+];
+
+const formBody = document.getElementById('formBody');
+const savedData = JSON.parse(localStorage.getItem('indikatorInput') || '[]');
+
+indikator.forEach((item, i) => {
+  const bulanIni = savedData[i]?.bulanIni ?? '';
+  const row = document.createElement('tr');
+  row.innerHTML = `<td>${item.nama}</td>
+    <td><input type="number" name="bulanIni" data-index="${i}" step="any" value="${bulanIni}" required></td>`;
+  formBody.appendChild(row);
+});
+
+const ctx = document.getElementById('indikatorChart').getContext('2d');
+let chart = new Chart(ctx, {
+  type: 'bar',
+  data: {
+    labels: indikator.map(i => i.nama),
+    datasets: [
+      {
+        label: 'Bulan Ini',
+        data: [],
+        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+        categoryPercentage: 0.5,
+        barPercentage: 0.7
+      }
+    ]
+  },
+  options: {
+    responsive: true,
+    plugins: {
+      legend: { position: 'top' },
+      datalabels: {
+        anchor: 'center', align: 'center',
+        offset: ctx => window.innerWidth <= 600 ? 3 : 8,
+        formatter: (value, ctx) => value + (indikator[ctx.dataIndex].persen ? '%' : ''),
+        color: '#000',
+        textStrokeColor: '#fff',
+        textStrokeWidth: 0.5,
+        font: ctx => ({
+          weight: 'bold',
+          size: window.innerWidth <= 600 ? 7 : 13
+        })
+      },
+      annotation: { annotations: {} },
+      tooltip: {
+        mode: 'index', intersect: false,
+        callbacks: {
+          title: (ctx) => `Indikator: ${ctx[0].label}`,
+          label: (ctx) => `${ctx.dataset.label}: ${ctx.raw}${indikator[ctx.dataIndex].persen ? '%' : ''}`
+        }
+      }
+    },
+    interaction: { mode: 'index', intersect: false },
+    scales: {
+      y: {
+        beginAtZero: true,
+        title: { display: true, text: 'Nilai (%)' },
+        suggestedMax: 100
+      },
+      x: {
+        ticks: {
+          color: '#000',
+          padding: 2,
+          font: {
+            size: window.innerWidth <= 600 ? 10 : 14,
+            weight: 'bold'
+          }
+        }
+      }
+    }
+  },
+  plugins: [ChartDataLabels]
+});
+
+document.getElementById('dataForm').addEventListener('submit', function(e) {
+  e.preventDefault();
+  const bulanIni = [...document.getElementsByName('bulanIni')].map(i => parseFloat(i.value));
+  localStorage.setItem('indikatorInput', JSON.stringify(bulanIni.map((v) => ({ bulanIni: v }))));
+  chart.data.datasets[0].data = bulanIni;
+
+  const semua = [...bulanIni, ...indikator.map(i => i.target)];
+  const max = Math.max(...semua);
+  chart.options.scales.y.suggestedMax = max < 10 ? 10 : max * 1.2;
+
+  const annotations = {};
+  indikator.forEach((item, i) => {
+    const isMobile = window.innerWidth <= 600;
+    const fontSize = isMobile ? 7 : 13;
+    let yOffset, posisiLabel;
+    if (item.label === 'Maksimal') {
+      yOffset = isMobile ? 5 : 10;
+      posisiLabel = 'start';
+    } else {
+      yOffset = -item.target / 2;
+      yOffset = Math.max(-40, Math.min(yOffset, -5));
+      posisiLabel = item.target <= 5 ? 'start' : 'end';
+    }
+
+    annotations['target' + i] = {
+      type: 'line',
+      yMin: item.target,
+      yMax: item.target,
+      borderColor: (i === 1) ? 'red' : 'green',
+      borderWidth: 2,
+      label: {
+        content: `${item.label} ${item.target}%`,
+        enabled: true,
+        backgroundColor: 'transparent',
+        color: '#000',
+        textStrokeColor: '#fff',
+        textStrokeWidth: 1,
+        font: { weight: 'bold', size: fontSize },
+        position: posisiLabel,
+        yAdjust: yOffset
+      },
+      xMin: i - 0.4,
+      xMax: i + 0.4
+    };
+
+    if (i === 1) {
+      annotations['ideal0'] = {
+        type: 'line',
+        yMin: 0,
+        yMax: 0,
+        borderColor: 'green',
+        borderWidth: 1.5,
+        label: {
+          content: 'Ideal 0%',
+          enabled: true,
+          backgroundColor: 'transparent',
+          color: '#000',
+          textStrokeColor: '#fff',
+          textStrokeWidth: 1,
+          font: { style: 'italic', size: fontSize },
+          position: 'end',
+          yAdjust: isMobile ? 19 : 12
+        },
+        xMin: i - 0.4,
+        xMax: i + 0.4
+      };
+    }
+  });
+  chart.options.plugins.annotation.annotations = annotations;
+  chart.update();
+});
+
+document.getElementById('saveBtn').addEventListener('click', () => {
+  document.querySelectorAll('input[type="number"]').forEach(i => i.classList.add('for-canvas'));
+  html2canvas(document.getElementById('container')).then(canvas => {
+    document.querySelectorAll('input[type="number"]').forEach(i => i.classList.remove('for-canvas'));
+    const link = document.createElement('a');
+    link.download = 'grafik_indikator.png';
+    link.href = canvas.toDataURL();
+    link.click();
+  });
+});
+</script>
+</body>
+</html>
