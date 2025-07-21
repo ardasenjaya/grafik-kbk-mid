@@ -139,6 +139,7 @@ let chart = new Chart(ctx, {
       },
       annotation: { annotations: {} },
       tooltip: {
+        enabled: window.innerWidth > 600,
         mode: 'index', intersect: false,
         callbacks: {
           title: (ctx) => `Indikator: ${ctx[0].label}`,
